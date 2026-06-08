@@ -16,6 +16,10 @@ from utils.data_loader import (
 
 DASHBOARD_TITLE = "IBC - Delivery Partner Analysis"
 PAGES = ["Overall Analysis", "Online Analysis"]
+DATASET_GOOGLE_SHEET_URL = (
+    "https://docs.google.com/spreadsheets/d/"
+    "1rTH1_ikBAzzsLaDvfopI-tPiTe3nvhQonwB6sWFl-20/edit?gid=324204648#gid=324204648"
+)
 VALID_PARTNERS = ["Wolt", "Uber Eats", "Lieferando"]
 VALID_PARTNER_SET = set(VALID_PARTNERS)
 FILTER_DATE_COLUMN = "_filter_date"
@@ -45,6 +49,24 @@ def render_data_status(data: dict) -> None:
     st.write(f"product_analysis rows count: {row_count(data, 'product_analysis')}")
     st.write(f"payouts rows count: {row_count(data, 'payouts')}")
     st.write(f"offline rows count: {row_count(data, 'offline')}")
+
+
+def render_sidebar_dataset_link() -> None:
+    st.sidebar.markdown(
+        f"""
+        <div class="sidebar-dataset-section">
+            <div class="sidebar-dataset-title">Dataset</div>
+            <a class="sidebar-dataset-link"
+               href="{escape(DATASET_GOOGLE_SHEET_URL)}"
+               target="_blank"
+               rel="noopener noreferrer">
+                <span class="sidebar-dataset-link-icon" aria-hidden="true"></span>
+                <span>Google Sheet</span>
+            </a>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def format_euro(value: float) -> str:
@@ -4247,10 +4269,17 @@ def build_overall_monthly_channel_frame(metrics: dict) -> pd.DataFrame:
     return monthly.sort_values("month_date").reset_index(drop=True)[columns]
 
 
-def overall_sales_breakdown_empty_chart(title: str, subtitle: str, message: str) -> go.Figure:
+def overall_sales_breakdown_empty_chart(
+    title: str,
+    subtitle: str,
+    message: str,
+    show_title: bool = True,
+    height: int = 520,
+    top_margin: int = 92,
+) -> go.Figure:
     figure = go.Figure()
     figure.update_layout(
-        title=online_chart_title(title, subtitle, subtitle_color="#9A9A9A"),
+        title=online_chart_title(title, subtitle, subtitle_color="#9A9A9A") if show_title else None,
         paper_bgcolor="#1A1A1A",
         plot_bgcolor="#1A1A1A",
         font={"color": "#FFFFFF"},
@@ -4265,8 +4294,8 @@ def overall_sales_breakdown_empty_chart(title: str, subtitle: str, message: str)
                 "font": {"color": "#9A9A9A", "size": 14},
             }
         ],
-        margin={"l": 52, "r": 34, "t": 92, "b": 56},
-        height=520,
+        margin={"l": 52, "r": 34, "t": top_margin, "b": 56},
+        height=height,
         showlegend=False,
     )
     figure.update_xaxes(
@@ -4351,7 +4380,10 @@ def build_monthly_total_gross_sale_chart(monthly_frame: pd.DataFrame) -> go.Figu
     return figure
 
 
-def build_online_offline_trend_chart(monthly_frame: pd.DataFrame) -> go.Figure:
+def build_online_offline_trend_chart(
+    monthly_frame: pd.DataFrame,
+    show_header: bool = True,
+) -> go.Figure:
     title = "Online vs Offline Trend"
     subtitle = "Month-by-month channel comparison"
     trend_columns = ["offline", "online"]
@@ -4360,6 +4392,9 @@ def build_online_offline_trend_chart(monthly_frame: pd.DataFrame) -> go.Figure:
             title,
             subtitle,
             "No channel trend data available for selected filters.",
+            show_title=show_header,
+            height=520 if show_header else 430,
+            top_margin=92 if show_header else 18,
         )
 
     series_config = [
@@ -4395,21 +4430,13 @@ def build_online_offline_trend_chart(monthly_frame: pd.DataFrame) -> go.Figure:
     max_value = float(monthly_frame[trend_columns].max().max())
     y_top = max_value * 1.24 if max_value > 0 else 1.0
     figure.update_layout(
-        title=online_chart_title(title, subtitle, subtitle_color="#9A9A9A"),
+        title=online_chart_title(title, subtitle, subtitle_color="#9A9A9A") if show_header else None,
         paper_bgcolor="#1A1A1A",
         plot_bgcolor="#1A1A1A",
         font={"color": "#FFFFFF"},
-        margin={"l": 52, "r": 34, "t": 92, "b": 56},
-        legend={
-            "orientation": "h",
-            "yanchor": "top",
-            "y": 0.99,
-            "xanchor": "right",
-            "x": 0.99,
-            "font": {"color": "#CFC7BD", "size": 13},
-            "tracegroupgap": 8,
-        },
-        height=520,
+        margin={"l": 52, "r": 34, "t": 92 if show_header else 18, "b": 56},
+        height=520 if show_header else 430,
+        showlegend=False,
         hovermode="x unified",
     )
     figure.update_xaxes(
@@ -4677,13 +4704,23 @@ def build_quarterly_revenue_chart(quarterly_frame: pd.DataFrame) -> go.Figure:
     return figure
 
 
-def build_quarterly_growth_chart(quarterly_frame: pd.DataFrame) -> go.Figure:
+def build_quarterly_growth_chart(
+    quarterly_frame: pd.DataFrame,
+    show_header: bool = True,
+) -> go.Figure:
     title = "Quarterly Growth %"
     subtitle = "Financial-year quarter growth vs previous quarter"
     message = "At least two quarters are required to calculate quarterly growth."
     growth_frame = quarterly_frame.dropna(subset=["growth_pct"]).copy() if not quarterly_frame.empty else quarterly_frame
     if quarterly_frame.empty or len(quarterly_frame.index) < 2 or growth_frame.empty:
-        return overall_sales_breakdown_empty_chart(title, subtitle, message)
+        return overall_sales_breakdown_empty_chart(
+            title,
+            subtitle,
+            message,
+            show_title=show_header,
+            height=520 if show_header else 430,
+            top_margin=92 if show_header else 18,
+        )
 
     growth_values = pd.to_numeric(growth_frame["growth_pct"], errors="coerce").fillna(0).tolist()
     marker_colors = ["#2ECC71" if value >= 0 else "#FF5C7A" for value in growth_values]
@@ -4767,21 +4804,13 @@ def build_quarterly_growth_chart(quarterly_frame: pd.DataFrame) -> go.Figure:
     )
     figure.add_hline(y=0, line_color="#2A2A2A", line_width=1)
     figure.update_layout(
-        title=online_chart_title(title, subtitle, subtitle_color="#9A9A9A"),
+        title=online_chart_title(title, subtitle, subtitle_color="#9A9A9A") if show_header else None,
         paper_bgcolor="#1A1A1A",
         plot_bgcolor="#1A1A1A",
         font={"color": "#FFFFFF"},
-        margin={"l": 52, "r": 34, "t": 92, "b": 56},
-        height=520,
-        legend={
-            "orientation": "h",
-            "yanchor": "top",
-            "y": 0.98,
-            "xanchor": "left",
-            "x": 0,
-            "font": {"color": "#CFC7BD", "size": 13},
-            "tracegroupgap": 8,
-        },
+        margin={"l": 52, "r": 34, "t": 92 if show_header else 18, "b": 56},
+        height=520 if show_header else 430,
+        showlegend=False,
         hovermode="x unified",
     )
     figure.update_xaxes(
@@ -4875,6 +4904,7 @@ def calculate_overall_business_metrics(
     )
     month_count = int(monthly_total["month_date"].nunique()) if not monthly_total.empty else 0
     average_monthly_sales = overall_gross_sales / month_count if month_count else 0.0
+    projected_fy_sales = average_monthly_sales * 12
     total_orders = count_overall_orders(
         online_orders_df if online_orders_df is not None else pd.DataFrame()
     )
@@ -4896,6 +4926,7 @@ def calculate_overall_business_metrics(
         "monthly_total_gross": monthly_total_gross,
         "overall_gross_sales": overall_gross_sales,
         "average_monthly_sales": average_monthly_sales,
+        "projected_fy_sales": projected_fy_sales,
         "average_monthly_growth_pct": average_monthly_growth_pct,
         "average_order_value": average_order_value,
         "total_orders": total_orders,
@@ -4908,6 +4939,39 @@ def format_signed_percent(value: float | None) -> str:
     if value is None:
         return "N/A"
     return f"{value:+.1f}%"
+
+
+def render_overall_chart_card_header(
+    title: str,
+    subtitle: str,
+    legend_items: list[dict[str, str]],
+) -> None:
+    legend_markup = ""
+    if legend_items:
+        legend_markup = "".join(
+            (
+                "<div class='overall-chart-card-legend-item'>"
+                f"<span class='overall-chart-card-legend-{escape(item.get('style', 'dot'))}' "
+                f"style='background:{escape(item['color'])};'></span>"
+                f"<span>{escape(item['label'])}</span>"
+                "</div>"
+            )
+            for item in legend_items
+        )
+        legend_markup = f"<div class='overall-chart-card-legend'>{legend_markup}</div>"
+
+    st.markdown(
+        f"""
+        <div class="overall-chart-card-header">
+            <div class="overall-chart-card-title-block">
+                <div class="overall-chart-card-title">{escape(title)}</div>
+                <div class="overall-chart-card-subtitle">{escape(subtitle)}</div>
+            </div>
+            {legend_markup}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_overall_business_analysis(
@@ -4954,11 +5018,10 @@ def render_overall_business_analysis(
             "Offline order-level data required",
         )
     with second_row_columns[2]:
-        render_summary_card_with_secondary(
-            "Best Performing Month",
-            metrics["best_month_label"],
-            format_euro(metrics["best_month_gross_sales"]),
-            "Highest Gross Sales Month",
+        render_summary_card(
+            "PROJECTED FY SALES",
+            format_euro(metrics["projected_fy_sales"]),
+            "Based on current run rate",
         )
     st.markdown('<div style="height: 28px;"></div>', unsafe_allow_html=True)
     split_metrics = build_overall_split_metrics(metrics, offline_df)
@@ -4982,8 +5045,16 @@ def render_overall_business_analysis(
             )
     with breakdown_columns[1]:
         with st.container(key="overall_sales_breakdown_trend_card"):
+            render_overall_chart_card_header(
+                "Online vs Offline Trend",
+                "Month-by-month channel comparison",
+                [
+                    {"label": "Offline", "color": "#2ECC71", "style": "dot"},
+                    {"label": "Online", "color": "#4A9EFF", "style": "dot"},
+                ],
+            )
             st.plotly_chart(
-                build_online_offline_trend_chart(monthly_channel_frame),
+                build_online_offline_trend_chart(monthly_channel_frame, show_header=False),
                 use_container_width=True,
                 config={"displayModeBar": False},
             )
@@ -5025,8 +5096,17 @@ def render_overall_business_analysis(
             )
     with quarterly_columns[1]:
         with st.container(key="overall_quarterly_growth_card"):
+            render_overall_chart_card_header(
+                "Quarterly Growth %",
+                "Financial-year quarter growth vs previous quarter",
+                [
+                    {"label": "Positive", "color": "#2ECC71", "style": "dot"},
+                    {"label": "Negative", "color": "#FF5C7A", "style": "dot"},
+                    {"label": "Zero line", "color": "#2A2A2A", "style": "line"},
+                ],
+            )
             st.plotly_chart(
-                build_quarterly_growth_chart(quarterly_frame),
+                build_quarterly_growth_chart(quarterly_frame, show_header=False),
                 use_container_width=True,
                 config={"displayModeBar": False},
             )
@@ -5326,6 +5406,71 @@ def render_overall_analysis(data: dict) -> None:
                 line-height: 1.25;
             }
 
+            .overall-chart-card-header {
+                align-items: flex-start;
+                display: flex;
+                gap: 20px;
+                justify-content: space-between;
+                min-height: 76px;
+                padding: 8px 6px 0;
+            }
+
+            .overall-chart-card-title-block {
+                min-width: 0;
+            }
+
+            .overall-chart-card-title {
+                color: #FFFFFF;
+                font-size: 22px;
+                font-weight: 800;
+                letter-spacing: 0;
+                line-height: 1.2;
+                margin-bottom: 8px;
+            }
+
+            .overall-chart-card-subtitle {
+                color: #9A9A9A;
+                font-size: 16px;
+                font-weight: 700;
+                line-height: 1.25;
+            }
+
+            .overall-chart-card-legend {
+                align-items: center;
+                display: flex;
+                flex: 0 0 auto;
+                flex-wrap: wrap;
+                gap: 12px 20px;
+                justify-content: flex-end;
+                margin-top: 4px;
+                max-width: 46%;
+            }
+
+            .overall-chart-card-legend-item {
+                align-items: center;
+                color: #CFC7BD;
+                display: inline-flex;
+                font-size: 13px;
+                font-weight: 700;
+                gap: 8px;
+                line-height: 1;
+                white-space: nowrap;
+            }
+
+            .overall-chart-card-legend-dot {
+                border-radius: 999px;
+                display: inline-block;
+                height: 11px;
+                width: 11px;
+            }
+
+            .overall-chart-card-legend-line {
+                border-radius: 999px;
+                display: inline-block;
+                height: 2px;
+                width: 34px;
+            }
+
             .st-key-overall_sales_breakdown_total_card,
             .st-key-overall_sales_breakdown_trend_card,
             .st-key-overall_sales_mom_change_card,
@@ -5371,6 +5516,14 @@ def render_overall_analysis(data: dict) -> None:
                 .st-key-overall_quarterly_revenue_card,
                 .st-key-overall_quarterly_growth_card {
                     min-height: 520px;
+                }
+
+                .overall-chart-card-header {
+                    min-height: 104px;
+                }
+
+                .overall-chart-card-legend {
+                    max-width: 100%;
                 }
             }
         </style>
@@ -6211,6 +6364,65 @@ def main() -> None:
             .block-container {
                 padding-top: 1rem;
             }
+
+            [data-testid="stSidebar"] {
+                background: #111111;
+            }
+
+            .sidebar-dataset-section {
+                border-top: 1px solid #2A2A2A;
+                margin-top: 1.15rem;
+                padding-top: 1rem;
+            }
+
+            .sidebar-dataset-title {
+                color: #9A9A9A;
+                font-size: 0.78rem;
+                font-weight: 700;
+                letter-spacing: 0.05em;
+                margin-bottom: 0.55rem;
+                text-transform: uppercase;
+            }
+
+            .sidebar-dataset-link {
+                align-items: center;
+                border-radius: 8px;
+                color: #E7E1D8 !important;
+                display: inline-flex;
+                font-size: 0.94rem;
+                font-weight: 600;
+                gap: 0.55rem;
+                line-height: 1.2;
+                padding: 0.52rem 0.58rem;
+                text-decoration: none !important;
+                width: 100%;
+            }
+
+            .sidebar-dataset-link:hover {
+                background: #1A1A1A;
+                color: #FFFFFF !important;
+                text-decoration: none !important;
+            }
+
+            .sidebar-dataset-link-icon {
+                border: 1.5px solid #9A9A9A;
+                border-radius: 3px;
+                box-sizing: border-box;
+                height: 12px;
+                position: relative;
+                width: 12px;
+            }
+
+            .sidebar-dataset-link-icon::after {
+                border-right: 1.5px solid #9A9A9A;
+                border-top: 1.5px solid #9A9A9A;
+                content: "";
+                height: 6px;
+                position: absolute;
+                right: -4px;
+                top: -4px;
+                width: 6px;
+            }
         </style>
         """,
         unsafe_allow_html=True,
@@ -6253,6 +6465,7 @@ def main() -> None:
     if st.sidebar.button("Refresh data"):
         clear_reporting_data_cache()
         st.rerun()
+    render_sidebar_dataset_link()
 
     try:
         data = load_reporting_data(REPORTING_DATA_SOURCE_VERSION)
